@@ -101,9 +101,9 @@ func (h *HCI) SetTransportH4Uart(path string, baud int) error {
 }
 
 // SetTransportH4Usb sets h4 USB options
-func (h *HCI) SetTransportH4Usb(ctx *gousb.Context) error {
+func (h *HCI) SetTransportH4Usb(ctx *gousb.Context, vendorId, productId uint16) error {
 	h.transport = transport{
-		h4usb: &transportH4Usb{ctx},
+		h4usb: &transportH4Usb{ctx, vendorId, productId},
 	}
 	return nil
 }

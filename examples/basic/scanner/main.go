@@ -18,7 +18,10 @@ var (
 	dup = flag.Bool("dup", true, "allow duplicate reported")
 )
 
-// Bus 001 Device 014: ID 2fe3:000b ZEPHYR USB-DEV
+// CONFIG_USB_DEVICE_VID=0x2FE3
+// CONFIG_USB_PID_BLE_HCI_H4_SAMPLE=0x000C
+const usbVendorId uint16 = 0x2fe3
+const usbProductId uint16 = 0x000c
 
 func main() {
 	flag.Parse()
@@ -27,7 +30,9 @@ func main() {
 	ctx := gousb.NewContext()
 	defer ctx.Close()
 
-	opt := ble.OptTransportH4Usb(ctx)
+	//ctx.Debug(3)
+
+	opt := ble.OptTransportH4Usb(ctx, usbVendorId, usbProductId)
 
 	d, err := dev.NewDevice("", opt)
 	if err != nil {

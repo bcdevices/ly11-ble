@@ -1,12 +1,9 @@
 package h4
 
 import (
+	"context"
 	"fmt"
 	"io"
-	//"net"
-	//"os"
-	//"sync"
-	"context"
 	"time"
 
 	"github.com/google/gousb"
@@ -14,11 +11,11 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func NewUsb(ctx *gousb.Context) (io.ReadWriteCloser, error) {
+func NewUsb(ctx *gousb.Context, usbVendorId, usbProductId uint16) (io.ReadWriteCloser, error) {
 	logrus.Debugf("opening h4 usb...")
 
 	fast := time.Millisecond * 500
-	rwc, err := NewUsbRWC(ctx, fast)
+	rwc, err := NewUsbRWC(ctx, fast, usbVendorId, usbProductId)
 	if err != nil {
 		return nil, errors.Wrap(err, "open")
 	}
@@ -28,8 +25,6 @@ func NewUsb(ctx *gousb.Context) (io.ReadWriteCloser, error) {
 		rwc.Close()
 		return nil, errors.Wrap(err, "resetAndWaitIdle")
 	}
-
-	fmt.Printf("reset and wait idle complete.\n")
 
 	h := &h4{
 		rwc:     rwc,
@@ -45,44 +40,47 @@ func NewUsb(ctx *gousb.Context) (io.ReadWriteCloser, error) {
 }
 
 type usbRWC struct {
-	ctx       *gousb.Context
-	usbDev    *gousb.Device
-	intf      *gousb.Interface
-	inEp      *gousb.InEndpoint
-	outEp     *gousb.OutEndpoint
-	inStream  *gousb.ReadStream
-	outStream *gousb.WriteStream
+	ctx    *gousb.Context
+	usbDev *gousb.Device
+	intf   *gousb.Interface
+	inEp   *gousb.InEndpoint
+	outEp  *gousb.OutEndpoint
 
 	timeout time.Duration
 }
 
 func (u *usbRWC) Read(p []byte) (int, error) {
-	fmt.Printf("usbRWC: read (buf:%d)...\n", len(p))
+	logrus.Debugf("usbRWC: read (buf:%d)...", len(p))
 
 	opCtx := context.Background()
+
 	opCtx, done := context.WithTimeout(opCtx, u.timeout)
 	defer done()
 
-	//n, err := u.inEp.ReadContext(opCtx, p)
-	n, err := u.inStream.ReadContext(opCtx, p)
-	select {
-	case <-opCtx.Done():
-		fmt.Printf("usbRWC: read complete. (timeout)\n")
+	n, err := u.inEp.ReadContext(opCtx, p)
+	logrus.Debugf("usbRWC: read complete.(n=%v, err=%v (%T))", n, err, err)
 
-		return 0, nil
+	if ts, ok := err.(gousb.TransferStatus); ok {
+		if ts == gousb.TransferCancelled {
+			return n, nil
+		}
 	}
-	fmt.Printf("usbRWC: read complete.(n=%v, err=%v)\n", n, err)
+
 	return n, err
 }
 
 func (u *usbRWC) Write(p []byte) (int, error) {
-	fmt.Printf("usbRWC: write(%v)\n", p)
+	logrus.Debugf("usbRWC: write(%v)", p)
+
 	opCtx := context.Background()
+
 	opCtx, done := context.WithTimeout(opCtx, u.timeout)
 	defer done()
-	//n, err := u.outEp.WriteContext(opCtx, p)
-	n, err := u.outStream.WriteContext(opCtx, p)
-	fmt.Printf("usbRWC: write complete.\n")
+
+	n, err := u.outEp.WriteContext(opCtx, p)
+
+	logrus.Debugf("usbRWC: write complete.")
+
 	return n, err
 }
 
@@ -95,9 +93,8 @@ func (u *usbRWC) Close() error {
 	return nil
 }
 
-func NewUsbRWC(ctx *gousb.Context, timeout time.Duration) (*usbRWC, error) {
-	const usbVendorId uint16 = 0x2fe3
-	const usbProductId uint16 = 0x000c
+func NewUsbRWC(ctx *gousb.Context, timeout time.Duration,
+	usbVendorId, usbProductId uint16) (*usbRWC, error) {
 
 	usbDev, err := ctx.OpenDeviceWithVIDPID(gousb.ID(usbVendorId),
 		gousb.ID(usbProductId))
@@ -141,30 +138,12 @@ func NewUsbRWC(ctx *gousb.Context, timeout time.Duration) (*usbRWC, error) {
 		return nil, fmt.Errorf("claim out Ep: %w", err)
 	}
 
-	inStream, err := inEp.NewStream(64, 8)
-	if err != nil {
-		intf.Close()
-		_ = usbDev.Close()
-
-		return nil, fmt.Errorf("prepare input stream: %w", err)
-	}
-
-	outStream, err := outEp.NewStream(64, 8)
-	if err != nil {
-		intf.Close()
-		_ = usbDev.Close()
-
-		return nil, fmt.Errorf("prepare output stream: %w", err)
-	}
-
 	return &usbRWC{
-		ctx:       ctx,
-		usbDev:    usbDev,
-		intf:      intf,
-		inEp:      inEp,
-		outEp:     outEp,
-		inStream:  inStream,
-		outStream: outStream,
-		timeout:   timeout,
+		ctx:     ctx,
+		usbDev:  usbDev,
+		intf:    intf,
+		inEp:    inEp,
+		outEp:   outEp,
+		timeout: timeout,
 	}, nil
 }

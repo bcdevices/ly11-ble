@@ -23,7 +23,7 @@ type DeviceOption interface {
 	SetTransportHCISocket(id int) error
 	SetTransportH4Socket(addr string, timeout time.Duration) error
 	SetTransportH4Uart(path string, baud int) error
-	SetTransportH4Usb(ctx *gousb.Context) error
+	SetTransportH4Usb(ctx *gousb.Context, vendorId, productId uint16) error
 	SetGattCacheFile(filename string)
 }
 
@@ -140,9 +140,9 @@ func OptTransportH4Uart(path string, baud int) Option {
 }
 
 // OptTransportH4Usb set h4 USB transport
-func OptTransportH4Usb(ctx *gousb.Context) Option {
+func OptTransportH4Usb(ctx *gousb.Context, vendorId, productId uint16) Option {
 	return func(opt DeviceOption) error {
-		opt.SetTransportH4Usb(ctx)
+		opt.SetTransportH4Usb(ctx, vendorId, productId)
 		return nil
 	}
 }
