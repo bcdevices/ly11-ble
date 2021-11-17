@@ -8,7 +8,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/gousb"
 	"github.com/jacobsa/go-serial/serial"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -45,34 +44,6 @@ func DefaultSerialOptions() serial.OpenOptions {
 		MinimumReadSize:       0,
 		InterCharacterTimeout: 100,
 	}
-}
-
-func NewUsb(ctx *gousb.Context) (io.ReadWriteCloser, error) {
-	logrus.Debugf("opening h4 usb...")
-
-	rwc, err := NewUsbRWC(ctx)
-	if err != nil {
-		return nil, errors.Wrap(err, "open")
-	}
-
-	// eof is ok (read timeout)
-	eofAsError := false
-	if err := resetAndWaitIdle(rwc, time.Second*2, eofAsError); err != nil {
-		rwc.Close()
-		return nil, errors.Wrap(err, "resetAndWaitIdle")
-	}
-
-	h := &h4{
-		rwc:     rwc,
-		done:    make(chan int),
-		rxQueue: make(chan []byte, rxQueueSize),
-		txQueue: make(chan []byte, txQueueSize),
-	}
-	h.frame = newFrame(h.rxQueue)
-
-	go h.rxLoop(eofAsError)
-
-	return h, nil
 }
 
 func NewSerial(opts serial.OpenOptions) (io.ReadWriteCloser, error) {
